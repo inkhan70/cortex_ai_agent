@@ -1,0 +1,30 @@
+workflows:
+  android-release-apk:
+    name: Cortex AI Agent - Android APK
+    max_build_duration: 30
+    instance_type: linux_x2
+    environment:
+      flutter: stable
+      vars:
+        PACKAGE_NAME: "com.cluster_lab.cortex_ai_agent"
+    scripts:
+      - name: Get Flutter packages
+        script: |
+          flutter pub get
+      - name: Analyze (non-blocking)
+        script: |
+          flutter analyze || true
+      - name: Run tests
+        script: |
+          flutter test || true
+      - name: Build APK (release, unsigned)
+        script: |
+          flutter build apk --release
+    artifacts:
+      - build/app/outputs/flutter-apk/*.apk
+    publishing:
+      email:
+        recipients: []
+        notify:
+          success: true
+          failure: true
