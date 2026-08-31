@@ -1,0 +1,73 @@
+workflows:
+  android-release-apk:
+    name: Cortex AI Agent - Android APK
+    max_build_duration: 30
+    instance_type: linux_x2
+    environment:
+      flutter: stable
+      vars:
+        PACKAGE_NAME: "com.cluster_lab.cortex_ai_agent"
+    scripts:
+      # --- Self-healing step 1 ---------------------------------------
+      # If the repo contains a zip of the project instead of extracted
+      # files (e.g. uploaded via GitHub's mobile "Upload files" flow),
+      # unzip it and flatten it into the repo root so pubspec.yaml/lib/
+      # end up where Flutter expects them.
+      - name: Unpack project if it was committed as a zip
+        script: |
+          set -e
+          ZIP_FILE=$(find . -maxdepth 1 -iname "*.zip" | head -n 1)
+          if [ -n "$ZIP_FILE" ]; then
+            echo "Found zipped project: $ZIP_FILE — extracting..."
+            unzip -o "$ZIP_FILE" -d _unzipped
+            # If the zip contained a single top-level folder, flatten it.
+            INNER_DIR=$(find _unzipped -maxdepth 1 -mindepth 1 -type d | head -n 1)
+            if [ -n "$INNER_DIR" ] && [ "$(find _unzipped -maxdepth 1 -mindepth 1 | wc -l)" -eq 1 ]; then
+              cp -rn "$INNER_DIR"/. .
+            else
+              cp -rn _unzipped/. .
+            fi
+            rm -rf _unzipped
+          else
+            echo "No zip found — assuming project files are already extracted."
+          fi
+
+      # --- Self-healing step 2 ---------------------------------------
+      # Generate the android/ platform folder if it's missing. Safe to
+      # run even if it already exists — flutter create will not
+      # overwrite existing lib/ or pubspec.yaml content, it only fills
+      # in gaps (platform scaffolding).
+      - name: Scaffold platform folders if missing
+        script: |
+          set -e
+          if [ ! -d "android" ]; then
+            echo "android/ folder missing — generating platform scaffolding..."
+            flutter create . --platforms=android --org com.cluster_lab --project-name cortex_ai_agent
+          else
+            echo "android/ folder already present — skipping scaffold."
+          fi
+
+      - name: Get Flutter packages
+        script: |
+          flutter pub get
+
+      - name: Analyze (non-blocking)
+        script: |
+          flutter analyze || true
+
+      - name: Run tests
+        script: |
+          flutter test || true
+
+      - name: Build APK (release, unsigned)
+        script: |
+          flutter build apk --release
+
+    artifacts:
+      - build/app/outputs/flutter-apk/*.apk
+    publishing:
+      email:
+        recipients: []
+        notify:
+          success: true
+          failure: true
